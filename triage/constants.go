@@ -33,6 +33,24 @@ const (
 	EnvTraceContent = "TRIAGE_TRACE_CONTENT"
 )
 
+// Layer 1: gen_ai semantic convention attributes (matching Python/TypeScript OpenLLMetry).
+const (
+	AttrGenAISystem               = "gen_ai.system"
+	AttrGenAIRequestModel         = "gen_ai.request.model"
+	AttrGenAIResponseModel        = "gen_ai.response.model"
+	AttrGenAIRequestTemperature   = "gen_ai.request.temperature"
+	AttrGenAIRequestTopP          = "gen_ai.request.top_p"
+	AttrGenAIRequestMaxTokens     = "gen_ai.request.max_tokens"
+	AttrGenAIRequestStopSequences = "gen_ai.request.stop_sequences"
+	AttrGenAIUsageInputTokens     = "gen_ai.usage.input_tokens"
+	AttrGenAIUsageOutputTokens    = "gen_ai.usage.output_tokens"
+	AttrGenAIUsageTotalTokens     = "gen_ai.usage.total_tokens"
+	AttrGenAIUsageReasoningTokens = "gen_ai.usage.reasoning_tokens"
+	AttrGenAIUsageCacheReadTokens = "gen_ai.usage.cache_read_tokens"
+	AttrGenAIUsageCacheWriteTokens = "gen_ai.usage.cache_write_tokens"
+	AttrGenAIResponseFinishReason = "gen_ai.response.finish_reason"
+)
+
 // Defaults.
 const (
 	DefaultEndpoint       = "https://api.triageai.dev"
