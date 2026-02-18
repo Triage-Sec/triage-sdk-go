@@ -16,10 +16,10 @@ import (
 )
 
 var (
-	mu           sync.Mutex
-	initialized  bool
-	provider     *sdktrace.TracerProvider
-	activeConfig *config // stored for runtime checks (e.g. traceContent)
+	mu          sync.Mutex
+	initialized bool
+	provider    *sdktrace.TracerProvider
+	globalCfg   *config // stored for runtime checks (e.g. traceContent)
 )
 
 // Init initializes the Triage SDK. It configures OpenTelemetry with a
@@ -102,7 +102,7 @@ func Init(opts ...Option) (func(), error) {
 	otel.SetTracerProvider(tp)
 
 	provider = tp
-	activeConfig = cfg
+	globalCfg = cfg
 	initialized = true
 
 	slog.Info("triage: SDK initialized",
@@ -138,6 +138,6 @@ func Shutdown(ctx context.Context) error {
 	err := provider.Shutdown(ctx)
 	initialized = false
 	provider = nil
-	activeConfig = nil
+	globalCfg = nil
 	return err
 }

@@ -46,4 +46,5 @@ func resetSDK(t *testing.T) {
 	}
 	initialized = false
 	provider = nil
+	globalCfg = nil
 }

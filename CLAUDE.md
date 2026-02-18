@@ -10,17 +10,19 @@ The Triage SDK captures telemetry from AI agents to enable security-focused obse
 
 **Layer 1: OpenTelemetry Instrumentation**
 
-Go does not have the same monkey-patching auto-instrumentation that Python and TypeScript get from OpenLLMetry/Traceloop. In Go, instrumentation is explicit — via middleware, interceptors, and wrapper clients. The OTel Go ecosystem provides `otelhttp`, `otelgrpc`, and similar middleware packages. For LLM providers, we provide thin instrumented wrapper functions that create spans around LLM API calls and extract `gen_ai.*` attributes (model, tokens, messages, tool calls). Users opt into instrumentation by wrapping their HTTP clients or using our provider-specific helpers.
+Go does not have the same monkey-patching auto-instrumentation that Python and TypeScript get from OpenLLMetry/Traceloop. Instead, the SDK provides `LogPrompt`/`LogCompletion` functions and a `StartWorkflow`/`StartAgent`/`StartTask`/`StartTool` span hierarchy that captures the same data. These use the same `gen_ai.*` (OTel standard) and `llm.*` (OpenLLMetry compat) semantic conventions, and all spans flow through our TracerProvider so triage context attributes are automatically injected by the TriageSpanProcessor.
+
+Note: We intentionally do NOT depend on `github.com/traceloop/go-openllmetry` because it creates its own TracerProvider internally and does not support custom SpanProcessor injection — meaning our triage.* context attributes would not appear on its spans. Instead we implement the same semantic conventions directly.
 
 **Layer 2: Triage context helpers (developer annotations)**
 
 Six data points that live in the application layer above the LLM library boundary. Instrumentation cannot see these, so the developer must pass them in via our helper functions. In Go, these flow through `context.Context` — the idiomatic mechanism for request-scoped values.
 
-The SDK is: OTel setup + a standard OTLP exporter pointed at our backend + 6 context helper functions + optional LLM provider wrappers.
+The SDK is: OTel setup + a standard OTLP exporter pointed at our backend + 6 context helper functions + LLM call instrumentation (LogPrompt/LogCompletion) + workflow/agent/task/tool span hierarchy.
 
 ## What Instrumentation Auto-Captures (via Provider Wrappers)
 
-When using our instrumented wrappers (e.g., `triageopenai.Wrap(client)`), spans capture:
+When using `LogPrompt`/`LogCompletion`, spans capture:
 
 - **System Prompt** — From the messages array sent to the LLM client.
 - **Chain-of-Thought / Hidden Thoughts** — From response (extended thinking, reasoning tokens).
@@ -198,20 +200,22 @@ sdk/go/
 ├── CLAUDE.md                           # This file
 ├── README.md                           # Public user-facing documentation
 ├── triage/                             # Main package — public API
-│   ├── triage.go                       # Init(), Shutdown(), top-level orchestration
+│   ├── sdk.go                          # Init(), Shutdown(), top-level orchestration
 │   ├── config.go                       # Config struct, functional options, env resolution
 │   ├── config_test.go                  # Config tests (arg > env > default, validation)
 │   ├── constants.go                    # Span attribute keys (triage.*), env var names
 │   ├── context.go                      # 6 context helpers (WithUser, WithTenant, etc.)
 │   ├── context_test.go                 # Context helper tests
+│   ├── llm.go                          # Layer 1: LogPrompt/LogCompletion, LLM types (Prompt, Completion, Usage, ToolCall, etc.)
+│   ├── llm_test.go                     # LLM instrumentation tests
+│   ├── workflow.go                     # Layer 1: StartWorkflow/StartAgent/StartTask/StartTool span hierarchy
+│   ├── workflow_test.go                # Workflow hierarchy tests
 │   ├── processor.go                    # TriageSpanProcessor — injects context into spans
 │   ├── processor_test.go              # Processor tests
-│   ├── triage_test.go                  # Init/shutdown integration tests
+│   ├── helpers_test.go                 # Shared test helpers (newTestProvider, attrMap, etc.)
+│   ├── sdk_test.go                     # Init/shutdown integration tests
 │   ├── version.go                      # Version constant
 │   └── e2e_test.go                     # End-to-end tests
-└── internal/                           # Internal packages (not importable by consumers)
-    └── testutil/                       # Shared test helpers
-        └── testutil.go                 # InMemoryExporter setup, span assertion helpers
 ```
 
 **Why `triage/` subdirectory for the main package?**
@@ -716,6 +720,31 @@ func TurnNumber(n int) SessionOption
 func HistoryHash(h string) SessionOption
 func Sanitized(s string) InputOption
 func TemplateVersion(v string) TemplateOption
+
+// Layer 1: LLM call instrumentation
+func LogPrompt(ctx context.Context, prompt Prompt) (*LLMSpan, context.Context)
+func (ls *LLMSpan) LogCompletion(completion Completion, usage Usage)
+func (ls *LLMSpan) Context() context.Context
+
+// Layer 1: Workflow/Agent/Task/Tool span hierarchy
+func StartWorkflow(ctx context.Context, name string) (*Workflow, context.Context)
+func StartTask(ctx context.Context, name string) (*Task, context.Context)
+func StartAgent(ctx context.Context, name string) (*Agent, context.Context)
+func StartTool(ctx context.Context, name string) (*ToolSpan, context.Context)
+func (w *Workflow) End()
+func (t *Task) End()
+func (a *Agent) End()
+func (t *ToolSpan) End()
+
+// LLM Types
+type Prompt struct { Vendor, Model string; Messages []Message; Tools []ToolDef; ... }
+type Message struct { Role, Content string; ToolCalls []ToolCall; ToolCallID string }
+type ToolCall struct { ID, Type string; Function ToolCallFunction }
+type ToolCallFunction struct { Name, Arguments string }
+type ToolDef struct { Type string; Function ToolFunction }
+type ToolFunction struct { Name, Description string; Parameters any }
+type Completion struct { Model string; Messages []Message }
+type Usage struct { PromptTokens, CompletionTokens, TotalTokens int }
 
 // Constants (exported for advanced users)
 const Version = "0.1.0"
